@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -211,12 +210,14 @@ func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	apiRouter.HandleFunc("/api/v0/ready", healthHandler.Readiness).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/api/v0/info", infoHandler.Info).Methods(http.MethodGet)
 
-	// Add CORS and logging
-	apiHandler := handlers.CORS(
-		handlers.AllowedOrigins([]string{"*"}),
-		handlers.AllowedMethods([]string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPut}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-	)(apiRouter)
+	// ROSAENG-1236: CORS disabled for machine-to-machine API
+	// Previous wildcard CORS was a security vulnerability
+	// apiHandler := handlers.CORS(
+	// 	handlers.AllowedOrigins([]string{"*"}),
+	// 	handlers.AllowedMethods([]string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPut}),
+	// 	handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	// )(apiRouter)
+	apiHandler := apiRouter
 
 	// Create health router
 	healthRouter := mux.NewRouter()
