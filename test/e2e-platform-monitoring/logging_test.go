@@ -1,4 +1,4 @@
-package e2e_test
+package e2e_monitoring_test
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	awstest "github.com/openshift/rosa-regional-platform-api/internal/test/aws"
 )
 
 // lokiQueryResponse represents the Loki HTTP query API response.
@@ -27,7 +29,7 @@ type lokiQueryResponse struct {
 var _ = Describe("Logging", Ordered, func() {
 	var (
 		rhobsAPIURL string
-		rhobsClient *APIClient
+		rhobsClient *awstest.APIClient
 	)
 
 	BeforeAll(func() {
@@ -35,7 +37,7 @@ var _ = Describe("Logging", Ordered, func() {
 		if rhobsAPIURL == "" {
 			Skip("E2E_RHOBS_API_URL not set — skipping logging tests")
 		}
-		rhobsClient = NewAPIClient(rhobsAPIURL)
+		rhobsClient = awstest.NewAPIClient(rhobsAPIURL)
 	})
 
 	It("should have logs from regional-cluster in Loki", func() {
@@ -60,7 +62,7 @@ var _ = Describe("Logging", Ordered, func() {
 
 })
 
-func queryLoki(client *APIClient, logql string) lokiQueryResponse {
+func queryLoki(client *awstest.APIClient, logql string) lokiQueryResponse {
 	path := fmt.Sprintf("/loki/api/v1/query_range?query=%s&limit=10&since=1h",
 		url.QueryEscape(logql))
 	resp, err := client.Get(path, "")
