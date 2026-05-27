@@ -167,7 +167,7 @@ ginkgo --label-filter="hcp:pre-monitor"   ./test/e2e-cli
 ginkgo --label-filter="hcp:monitor"       ./test/e2e-cli
 ginkgo --label-filter="hcp:post-monitor"  ./test/e2e-cli
 ginkgo --label-filter="hcp:pre-available" ./test/e2e-cli
-ginkgo --label-filter="hcp:available"     ./test/e2e-cli
+ginkgo --label-filter='hcp:available || !/./' ./test/e2e-cli  # includes unlabeled specs
 ginkgo --label-filter="hcp:post-available"./test/e2e-cli
 ginkgo --label-filter="hcp:pre-cleanup"   ./test/e2e-cli
 ginkgo --label-filter="hcp:cleanup"       ./test/e2e-cli
@@ -178,51 +178,48 @@ Individual phases can be run in isolation when the required state already exists
 
 ### Adding New Tests
 
-To add a test that runs during a specific lifecycle phase, label the `Describe` or `Context` block with the appropriate lifecycle label. All child specs inherit the label automatically — there's no need to repeat it on individual `It` blocks:
+**Unlabeled specs default to `hcp:available`.** Most new tests verify functionality against a live HCP — just write your test without any label and it will run during the `hcp:available` phase automatically. The runner uses `--label-filter='hcp:available || !/./'` (where `!/./` matches specs with no labels) to include unlabeled specs alongside explicitly labeled `hcp:available` specs.
 
 ```go
-// In a new file: test/e2e-cli/my_feature_test.go
+// No label needed — runs during hcp:available by default
 var _ = Describe("My Feature", func() {
-    Context("validates feature X after HCP is available", Label("hcp:available"), func() {
-        It("should verify feature X works", func() {
-            // test code — HCP is fully operational at this point
-        })
+    It("should work when the HCP is healthy", func() {
+        // test code — HCP is fully operational at this point
+    })
+})
+```
 
-        It("should verify feature Y works", func() {
-            // also inherits hcp:available from the Context
+**Only add a label when your test needs a different phase.** For example, if a test must run before the HCP exists or during cleanup:
+
+```go
+var _ = Describe("My Feature", func() {
+    Context("validates feature X after HCP is available", func() {
+        It("should verify feature X works", func() {
+            // no label — defaults to hcp:available
         })
     })
 
     Context("cleans up feature X resources", Label("hcp:pre-cleanup"), func() {
         It("should remove feature X test data", func() {
-            // cleanup before HCP deletion begins
+            // labeled — runs before HCP deletion begins
         })
     })
 })
 ```
 
-If a file only contains tests for a single phase, label the top-level `Describe`. This is most likely the case for almost all functional tests for various features that require the HCP to be ready for use.
+When a file contains tests spanning multiple phases, label at the `Context` level — all child specs inherit the label automatically:
 
 ```go
 var _ = Describe("HCP Metrics", Label("hcp:available"), func() {
     It("should have availability metric", func() { ... })
     It("should have install metric", func() { ... })
+    // both inherit hcp:available from the Describe
 })
 ```
 
-Every spec must have at least one `hcp:` lifecycle label, whether inherited from a parent container or applied directly. Unlabeled specs will be caught by the enforcement check described below.
+### Labels
 
-### Reserved Labels
-
-The following bare labels are **reserved** and must not be used on new tests. They exist only for backward compatibility with the original `cluster_test.go` specs:
-
-- `setup`, `create`, `monitor`, `cleanup`
-
-New tests must use the `hcp:` prefixed labels. A future migration will update existing tests to use `hcp:` labels and retire the bare names.
-
-### Fine-Grained Labels
-
-Tests may carry both a lifecycle label and a feature-specific label:
+Labels are freeform. Any label can be applied to any spec. The `hcp:` prefixed lifecycle labels control *when* a spec runs in the lifecycle; additional labels are encouraged for feature-level filtering:
 
 ```go
 Context("HCP metrics", Label("hcp:available", "hcp-metrics"), func() {
@@ -236,41 +233,16 @@ This allows running all tests for a specific feature across lifecycle phases:
 ginkgo --label-filter="hcp-metrics" ./test/e2e-cli
 ```
 
-### Enforcement
+Tests labeled with a lifecycle phase like `hcp:create` will run during that phase, but **ordering within a phase is not guaranteed** relative to other specs in the same phase. The core lifecycle logic (VPC creation, HCP creation, deletion, etc.) is managed by `cluster_test.go` in an `Ordered` suite — additional specs hooking into the same phase should not depend on running before or after that core logic.
 
-Every spec in `test/e2e-cli` must carry an `hcp:` lifecycle label (directly or inherited from a parent `Describe`/`Context`). This is enforced programmatically using Ginkgo's `PreviewSpecs()` API, which resolves the full label set for each spec — including labels inherited from parent containers.
+### Auditing
 
-Add the following to `test/e2e-cli/suite_test.go`:
+To see which specs have which labels (including inherited ones), use Ginkgo's dry-run mode:
 
-```go
-func TestE2ECLI(t *testing.T) {
-    RegisterFailHandler(Fail)
-
-    report := PreviewSpecs("ROSA Regional Platform API CLI E2E Suite")
-    for _, spec := range report.SpecReports {
-        if spec.State == types.SpecStatePending {
-            continue
-        }
-        labels := spec.Labels()
-        hasLifecycleLabel := false
-        for _, l := range labels {
-            if strings.HasPrefix(l, "hcp:") {
-                hasLifecycleLabel = true
-                break
-            }
-        }
-        if !hasLifecycleLabel {
-            t.Errorf("spec %q has no hcp: lifecycle label — see docs/e2e-lifecycle-testing.md", spec.FullText())
-        }
-    }
-    if t.Failed() {
-        t.Fatal("all e2e-cli specs must have an 'hcp:' lifecycle label. See docs/e2e-lifecycle-testing.md for more information.")
-    }
-
-    RunSpecs(t, "ROSA Regional Platform API CLI E2E Suite")
-}
+```bash
+ginkgo --dry-run -v ./test/e2e-cli
 ```
 
-This runs before any specs execute. If a developer adds a test without a lifecycle label, the suite fails immediately with a clear error pointing to this doc. No CI scripts or grep hacks needed — the enforcement lives in the test suite itself.
+This lists every spec with its resolved labels without executing anything. Use it to verify new tests land in the expected phase.
 
-**Note**: During the migration period, specs in `cluster_test.go` that only carry bare labels (`setup`, `create`, etc.) will fail this check. The migration to `hcp:` labels should be completed before enabling enforcement.
+For programmatic auditing (e.g., in CI), Ginkgo's `PreviewSpecs()` API returns a `Report` with `SpecReports`, each containing `Labels()` — the full resolved label set including labels inherited from parent `Describe`/`Context` blocks.
