@@ -129,6 +129,10 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.logger.Info("auto-assigned placement", "placement", placementName)
 	}
 
+	if callerARN := middleware.GetCallerARN(ctx); callerARN != "" {
+		req.Spec["creatorARN"] = callerARN
+	}
+
 	h.logger.Info("creating cluster", "account_id", accountID, "cluster_name", req.Name)
 
 	cluster, err := h.hyperfleetClient.CreateCluster(ctx, accountID, userEmail, &req)
