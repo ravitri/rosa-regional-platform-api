@@ -134,6 +134,7 @@ test-e2e-cli:
 		ROSACTL_BIN="${ROSACTL_BIN}" \
 		AWS_REGION="${AWS_REGION}" \
 		ginkgo -vv --junit-report=junit-cli.xml \
+		$(if $(E2E_LABEL_FILTER),--label-filter="$(E2E_LABEL_FILTER)") \
 		--output-dir=$(TEST_OUTPUT_DIR) ./test/e2e-cli
 
 test-e2e-platform-monitoring:

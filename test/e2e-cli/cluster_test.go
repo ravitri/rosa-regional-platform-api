@@ -210,6 +210,10 @@ var _ = Describe("ROSACTL CLI E2E Tests", Ordered, func() {
 		// but only does work when the normal cleanup specs were skipped
 		// (i.e., a mid-suite failure caused Ginkgo to skip them).
 		DeferCleanup(func() {
+			if os.Getenv("E2E_SKIP_CLEANUP") != "" {
+				GinkgoWriter.Printf("\n=== DeferCleanup: E2E_SKIP_CLEANUP is set, skipping teardown ===\n")
+				return
+			}
 			if cleanupCompleted {
 				GinkgoWriter.Printf("\n=== DeferCleanup: normal cleanup already ran, nothing to do ===\n")
 				return
