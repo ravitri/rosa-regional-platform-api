@@ -598,7 +598,7 @@ func (h *ZoaHandler) checkWriteCooldown(ctx context.Context, accountID, action, 
 		Since:         since,
 		DryRun:        &notDryRun,
 	}
-	recent, err := h.store.List(ctx, accountID, 1, filter)
+	recent, err := h.store.List(ctx, accountID, 0, filter)
 	if err != nil {
 		h.logger.Error("failed to check write cooldown", "error", err)
 		return nil
